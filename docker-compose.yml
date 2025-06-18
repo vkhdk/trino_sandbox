@@ -1,0 +1,54 @@
+version: '3'
+
+services:
+  minio:
+    image: minio/minio
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - ./minio_data:/data
+
+  hive-metastore:
+    image: bitsondatadev/hive-metastore:latest
+    container_name: hive-metastore
+    environment:
+      HIVE_METASTORE_DB_TYPE: postgres
+      HIVE_METASTORE_DB_HOST: postgres
+      HIVE_METASTORE_DB_NAME: metastore
+      HIVE_METASTORE_DB_USER: hive
+      HIVE_METASTORE_DB_PASS: hive
+    depends_on:
+      - postgres
+    ports:
+      - "9083:9083"
+    command: >
+      bash -c "/opt/hive/bin/schematool -dbType postgres -initSchema --verbose || true
+      && /opt/hive/bin/hive --service metastore"
+
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    environment:
+      POSTGRES_DB: metastore
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+
+  trino:
+    image: trinodb/trino:414
+    container_name: trino
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./trino/etc:/etc/trino
+      - ./trino/data:/var/trino/data
+    depends_on:
+      - hive-metastore
+      - minio
